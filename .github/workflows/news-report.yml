@@ -1,0 +1,23 @@
+name: Global News Report
+
+on:
+  schedule:
+    # 每4小时 (北京时间 08:00 / 12:00 / 16:00 / 20:00 / 00:00 / 04:00)
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run news report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python news_report.py

@@ -275,30 +275,5 @@ if alerts:
         msg = f"🚨 {len(alerts)}项异常  {now}\n\n" + "\n\n".join(alerts)
     send_telegram(f"{msg}\n\n—— Hermes · Amazon Monitor")
     print(f"ALERTS SENT: {len(alerts)}")
-elif all_ok:
-    # 每天 8:00 / 20:00 发送正常状态
-    bj_h = (datetime.now(timezone.utc).hour + 8) % 24
-    bj_m = datetime.now(timezone.utc).minute
-    if bj_h in (8, 20) and bj_m <= 5:
-        my = reports.get(MY_ASIN, {})
-        cmp = reports.get(COMPETITOR_ASIN, {})
-        status = f"""📦 Amazon 店铺快报  {now}
-
-🛒 我的产品
-  评分: {my.get('rating','?')} ⭐ | {my.get('reviews_count','?')} 评论
-  BSR: #{my.get('bsr','?'):,} | 跟卖: {my.get('other_sellers_new','?')}家
-
-🏪 竞品 KELIN
-  评分: {cmp.get('rating','?')} ⭐ | {cmp.get('reviews_count','?')} 评论
-  价格: ${cmp.get('price','?')}
-
-✅ 无异常
-
-—— Hermes · Amazon Monitor"""
-        send_telegram(status)
-        print("STATUS SENT")
-    else:
-        print("ALL OK - skip")
 else:
-    print("SCRAPE FAILED - sending error")
-    send_telegram(f"⚠️ Amazon 数据抓取失败 {now}\n请手动检查 ASIN: {MY_ASIN}")
+    print("ALL OK - skip")

@@ -244,10 +244,40 @@ def send_telegram(text):
     return json.loads(resp.read())
 
 
+# ── 状态持久化 ─────────────────────────────────────────
+
+STATE_FILE = os.path.join(os.path.dirname(__file__) or ".", "news_state.json")
+
+def load_state():
+    try:
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_state():
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump({
+                "last_push_ts": time.time(),
+                "last_push_time": datetime.now(BEIJING_TZ).isoformat(),
+            }, f)
+    except Exception:
+        pass
+
+
 # ── 主流程 ─────────────────────────────────────────────
 
 def main():
     print(f"[{datetime.now(BEIJING_TZ).isoformat()}] 开始抓取全球新闻...")
+
+    # 空窗检测（仅日志告警，不影响推送调度）
+    state = load_state()
+    last_ts = state.get("last_push_ts", 0)
+    if last_ts:
+        gap_h = (time.time() - last_ts) / 3600
+        if gap_h > 5:
+            print(f"⚠️ 调度空窗：上次推送 {gap_h:.1f} 小时前（正常间隔 4h）")
 
     all_entries = []
     for name, url in RSS_FEEDS:
@@ -270,6 +300,7 @@ def main():
     msg = format_message(top)
     result = send_telegram(msg)
     print(f"推送结果: {result.get('ok', False)}")
+    save_state()
 
 
 if __name__ == "__main__":

@@ -97,6 +97,25 @@ def parse_product(html, asin):
                     })
             except:
                 pass
+        
+        # 劫持检测所需: 图片数量 + 描述文本
+        img_count = len(re.findall(r'!\[[^\]]*\](?:\([^)]+\))?', html))
+        if img_count > 0:
+            data["image_count"] = img_count
+        else:
+            data["image_count"] = len(re.findall(r'Image|image-', html))
+        
+        # 提取描述 (Jina 格式: 产品描述之后的段落)
+        desc_match = re.search(r'(?:Description|Product Description|About this item|描述)[^\n]*\n+(.{50,800})', html, re.DOTALL)
+        if desc_match:
+            data["description"] = desc_match.group(1).strip()[:300]
+        elif "title" in data:
+            # Fallback: 取标题后的前几段作为描述
+            parts = html.split("\n\n")
+            for p in parts[3:8]:
+                if len(p) > 50 and "out of 5" not in p:
+                    data["description"] = p.strip()[:300]
+                    break
     else:
         # 原始 HTML 格式的解析逻辑
         # ... (keep existing logic)
@@ -145,6 +164,9 @@ def save_state(state):
             "last_reviews_count": state[MY_ASIN].get("last_reviews_count"),
             "last_bsr": state[MY_ASIN].get("last_bsr"),
             "last_sellers": state[MY_ASIN].get("last_sellers"),
+            "last_title_hash": state[MY_ASIN].get("last_title_hash"),
+            "last_image_count": state[MY_ASIN].get("last_image_count"),
+            "last_desc_hash": state[MY_ASIN].get("last_desc_hash"),
         }
     if COMPETITOR_ASIN in state:
         simple[COMPETITOR_ASIN] = {
@@ -250,6 +272,47 @@ if MY_ASIN in reports and MY_ASIN in state:
     new_bsr = reports[MY_ASIN].get("bsr")
     if old_bsr and new_bsr and new_bsr > old_bsr * 2:
         alerts.append(f"📉 BSR 暴跌: #{old_bsr:,} → #{new_bsr:,}")
+
+# ── 检测 Listing 劫持 (标题/图片/描述被修改) ────────────
+if MY_ASIN in reports and MY_ASIN in state:
+    d = reports[MY_ASIN]
+    st = state[MY_ASIN]
+    
+    # 标题改动
+    new_title = d.get("title", "")
+    if new_title:
+        new_hash = hashlib.md5(new_title.encode()).hexdigest()
+        old_hash = st.get("last_title_hash")
+        if old_hash and new_hash != old_hash:
+            alerts.append(
+                f"🔄 标题被修改!\n"
+                f"  旧: {st.get('last_title_preview', '?')[:80]}\n"
+                f"  新: {new_title[:80]}"
+            )
+        st["last_title_hash"] = new_hash
+        st["last_title_preview"] = new_title[:80]
+    
+    # 图片数量改动
+    new_imgs = d.get("image_count", 0)
+    old_imgs = st.get("last_image_count", 0)
+    if old_imgs > 0 and new_imgs > 0 and new_imgs != old_imgs:
+        alerts.append(
+            f"🖼 图片数量变化: {old_imgs} → {new_imgs} 张\n"
+            f"  主图/附图可能被替换"
+        )
+    st["last_image_count"] = new_imgs
+    
+    # 描述改动
+    new_desc = d.get("description", "")
+    if new_desc:
+        new_hash = hashlib.md5(new_desc.encode()).hexdigest()
+        old_hash = st.get("last_desc_hash")
+        if old_hash and new_hash != old_hash:
+            alerts.append(
+                f"📝 产品描述被修改!\n"
+                f"  新描述: {new_desc[:120]}..."
+            )
+        st["last_desc_hash"] = new_hash
 
 # ── 保存状态 ──────────────────────────────────────────
 if MY_ASIN in reports:

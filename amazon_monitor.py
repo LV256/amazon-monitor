@@ -266,11 +266,14 @@ if COMPETITOR_ASIN in reports:
     })
 save_state(state)
 
-# ── 发送告警 ──────────────────────────────────────────
+# ── 发送告警 (合并为一条) ──────────────────────────────
 now = datetime.now(TZ).strftime("%m-%d %H:%M")
 if alerts:
-    for alert in alerts:
-        send_telegram(f"{alert}\n\n—— Amazon Monitor {now}")
+    if len(alerts) == 1:
+        msg = alerts[0]
+    else:
+        msg = f"🚨 {len(alerts)}项异常  {now}\n\n" + "\n\n".join(alerts)
+    send_telegram(f"{msg}\n\n—— Hermes · Amazon Monitor")
     print(f"ALERTS SENT: {len(alerts)}")
 elif all_ok:
     # 每天 8:00 / 20:00 发送正常状态
@@ -291,7 +294,7 @@ elif all_ok:
 
 ✅ 无异常
 
-—— Amazon Monitor"""
+—— Hermes · Amazon Monitor"""
         send_telegram(status)
         print("STATUS SENT")
     else:

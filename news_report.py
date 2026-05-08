@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""全球热点新闻推送 — 每4小时抓取、排名、分析、推送 Telegram"""
+"""全球热点新闻推送 — 每4小时抓取、翻译为中文、排名、分析、推送 Telegram"""
 
 import os
 import re
@@ -7,8 +7,7 @@ import json
 import hashlib
 import time
 import xml.etree.ElementTree as ET
-from urllib.request import Request, urlopen
-from urllib.error import URLError
+from urllib.request import Request, urlopen, quote
 from datetime import datetime, timezone, timedelta
 
 # ── 配置 ──────────────────────────────────────────────
@@ -18,37 +17,70 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 
 # 全球 RSS 源
 RSS_FEEDS = [
-    ("Reuters World", "https://feeds.reuters.com/reuters/worldNews"),
-    ("Reuters Top", "https://feeds.reuters.com/reuters/topNews"),
-    ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
-    ("AP Top", "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"),
-    ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
-    ("CNBC Top", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
-    ("Guardian World", "https://www.theguardian.com/world/rss"),
-    ("NPR World", "https://feeds.npr.org/1004/rss.xml"),
+    ("路透社", "https://feeds.reuters.com/reuters/worldNews"),
+    ("路透头条", "https://feeds.reuters.com/reuters/topNews"),
+    ("BBC", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("纽约时报", "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"),
+    ("半岛电视台", "https://www.aljazeera.com/xml/rss/all.xml"),
+    ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("卫报", "https://www.theguardian.com/world/rss"),
+    ("NPR", "https://feeds.npr.org/1004/rss.xml"),
 ]
 
-# 关键词权重（出现这些词加分）
+# 关键词权重（英文关键词，用于原始英文文本打分）
 WEIGHT_KEYWORDS = {
-    # 地缘政治 — 高权重
     "war": 5, "invasion": 6, "nuclear": 7, "sanction": 4, "coup": 6,
     "missile": 5, "troop": 4, "military": 4, "ceasefire": 5, "conflict": 4,
     "attack": 5, "strike": 4, "drone": 4,
-    # 经济/市场 — 高权重
     "tariff": 5, "recession": 6, "inflation": 5, "fed": 4, "interest rate": 5,
     "stock market": 4, "crash": 6, "rally": 3, "gdp": 3, "debt": 4,
     "oil price": 4, "energy": 3, "trade war": 6,
-    # 科技
     "ai": 3, "artificial intelligence": 4, "chip": 3, "semiconductor": 4,
     "tesla": 3, "apple": 3, "microsoft": 3, "google": 3, "openai": 4,
     "crypto": 4, "bitcoin": 4,
-    # 中国相关
     "china": 3, "beijing": 3, "taiwan": 5, "xi": 3, "south china sea": 5,
-    # 突发事件
     "earthquake": 6, "tsunami": 6, "hurricane": 5, "pandemic": 6,
-    "outbreak": 5, "crash": 5, "explosion": 6, "shooting": 5, "hostage": 6,
+    "outbreak": 5, "explosion": 6, "shooting": 5, "hostage": 6,
 }
 
+# ── Google 翻译（免费，无需 API Key）───────────────────
+
+def translate_text(text, target="zh-CN", source="en", max_len=500):
+    """调用 Google Translate 免费接口翻译文本"""
+    if not text or not text.strip():
+        return text
+    text = text[:max_len]  # 限制长度
+    try:
+        url = (
+            "https://translate.googleapis.com/translate_a/single"
+            f"?client=gtx&sl={source}&tl={target}&dt=t&q={quote(text)}"
+        )
+        req = Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)",
+        })
+        resp = urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        # 结果格式: [[["翻译文本","原文",...]],...]
+        parts = []
+        for block in data[0]:
+            if block[0]:
+                parts.append(block[0])
+        return "".join(parts)
+    except Exception:
+        return text  # 翻译失败返回原文
+
+
+def translate_entries(entries):
+    """批量翻译标题和描述为中文"""
+    for e in entries:
+        e["title_cn"] = translate_text(e["title"])
+        e["desc_cn"] = translate_text(e["desc"]) if e["desc"] else ""
+        # 控制翻译速率
+        time.sleep(0.3)
+    return entries
+
+
+# ── RSS 抓取 ───────────────────────────────────────────
 
 def fetch_feed(name, url, timeout=12):
     """抓取单个 RSS feed，返回条目列表"""
@@ -66,7 +98,6 @@ def fetch_feed(name, url, timeout=12):
             link = item.findtext("link", "").strip()
             desc = item.findtext("description", "").strip()
             pub_date = item.findtext("pubDate", "")
-            # 去掉 HTML 标签
             desc = re.sub(r"<[^>]+>", "", desc)[:200]
             if title and link:
                 entries.append({
@@ -76,13 +107,14 @@ def fetch_feed(name, url, timeout=12):
                     "source": name,
                     "pub_date": pub_date,
                 })
-    except Exception as e:
-        pass  # 单个源失败不影响整体
+    except Exception:
+        pass
     return entries
 
 
+# ── 评分与排名 ─────────────────────────────────────────
+
 def compute_score(entry):
-    """基于关键词权重计算故事分值"""
     text = (entry["title"] + " " + entry["desc"]).lower()
     score = 0
     for kw, w in WEIGHT_KEYWORDS.items():
@@ -92,12 +124,10 @@ def compute_score(entry):
 
 
 def title_hash(title):
-    """标题的 MD5 前 8 位，用于去重"""
     return hashlib.md5(title.strip().lower().encode()).hexdigest()[:8]
 
 
 def deduplicate(entries):
-    """去掉标题高度相似（同一故事不同源）的重复项"""
     seen = {}
     result = []
     for e in entries:
@@ -108,8 +138,16 @@ def deduplicate(entries):
     return result
 
 
+def rank_and_pick(entries, top_n=10):
+    entries.sort(key=lambda e: compute_score(e), reverse=True)
+    unique = deduplicate(entries)
+    return unique[:top_n]
+
+
+# ── 分析生成（全中文）──────────────────────────────────
+
 def generate_analysis(entry, rank):
-    """基于关键词匹配生成简短分析 + 建议"""
+    """基于关键词匹配生成中文简短分析 + 建议"""
     text = (entry["title"] + " " + entry["desc"]).lower()
     analysis = ""
 
@@ -125,7 +163,7 @@ def generate_analysis(entry, rank):
     if any(w in text for w in ["recession", "crash", "plunge"]):
         analysis = "📉 衰退/暴跌信号，定投可加速加仓，短线建议止损"
     elif any(w in text for w in ["inflation", "cpi"]):
-        analysis = "📊 通胀数据影响 Fed 路径，数据超预期利空股市，低于预期利好"
+        analysis = "📊 通胀数据影响美联储路径，数据超预期利空股市，低于预期利好"
     elif any(w in text for w in ["fed", "interest rate", "rate cut", "rate hike"]):
         analysis = "🏦 货币政策风向标，降息利好科技/成长股，加息利好现金/短债"
     elif any(w in text for w in ["tariff", "trade war"]):
@@ -162,46 +200,39 @@ def generate_analysis(entry, rank):
     return analysis
 
 
-def rank_and_pick(entries, top_n=10):
-    """排名并挑出 top N"""
-    # 按分数降序
-    entries.sort(key=lambda e: compute_score(e), reverse=True)
-    # 去重
-    unique = deduplicate(entries)
-    # 取 top N
-    return unique[:top_n]
-
+# ── 格式化推送消息（全中文）────────────────────────────
 
 def format_message(stories):
-    """格式化为 Telegram 纯文本消息"""
-    now = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+    now = datetime.now(BEIJING_TZ).strftime("%m月%d日 %H:%M")
     lines = [
-        f"🌍 全球热点速报 · {now}",
-        f"━" * 32,
+        f"🌍 全球热点速报 · {now}（北京时间）",
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
 
     emojis = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
     for i, s in enumerate(stories):
         emoji = emojis[i] if i < len(emojis) else f"{i+1}."
-        lines.append(f"\n{emoji} {s['title']}")
-        if s["desc"]:
-            desc = s["desc"][:120]
+        # 优先使用中文翻译
+        title = s.get("title_cn") or s["title"]
+        desc = s.get("desc_cn") or s["desc"]
+
+        lines.append(f"\n{emoji} {title}")
+        if desc:
+            desc = desc[:120]
             lines.append(f"   {desc}")
-        lines.append(f"   📰 {s['source']}")
-        # 分析
+        lines.append(f"   📰 来源：{s['source']}")
         analysis = generate_analysis(s, i + 1)
         lines.append(f"   💡 {analysis}")
 
-    lines.append(f"\n{'━' * 32}")
+    lines.append(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("—— Hermes · 全球热点")
     return "\n".join(lines)
 
 
-def send_telegram(text):
-    """发送到 Telegram"""
-    import urllib.request
-    import urllib.parse
+# ── Telegram 发送 ──────────────────────────────────────
 
+def send_telegram(text):
+    import urllib.parse
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = urllib.parse.urlencode({
         "chat_id": CHAT_ID,
@@ -212,6 +243,8 @@ def send_telegram(text):
     resp = urlopen(req, timeout=15)
     return json.loads(resp.read())
 
+
+# ── 主流程 ─────────────────────────────────────────────
 
 def main():
     print(f"[{datetime.now(BEIJING_TZ).isoformat()}] 开始抓取全球新闻...")
@@ -229,7 +262,10 @@ def main():
         return
 
     top = rank_and_pick(all_entries, top_n=10)
-    print(f"选出 Top {len(top)} 条")
+    print(f"选出 Top {len(top)} 条，正在翻译为中文...")
+
+    top = translate_entries(top)
+    print("翻译完成")
 
     msg = format_message(top)
     result = send_telegram(msg)

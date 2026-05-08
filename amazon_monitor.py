@@ -15,19 +15,37 @@ COMPETITOR_ASIN = "B0CFXPZ5GT"
 DATA_FILE = "amazon_state.json"
 
 def fetch_text(url, timeout=15, retries=3):
-    for i in range(retries):
+    """抓取页面，尝试多个代理"""
+    strategies = [
+        # 策略1: 直连
+        lambda u: urllib.request.urlopen(urllib.request.Request(u, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }), timeout=timeout).read().decode("utf-8", errors="ignore"),
+        # 策略2: Google Cache
+        lambda u: urllib.request.urlopen(urllib.request.Request(
+            f"https://webcache.googleusercontent.com/search?q=cache:{u}", headers={
+            "User-Agent": "Mozilla/5.0"
+        }), timeout=timeout).read().decode("utf-8", errors="ignore"),
+        # 策略3: textise dot iitty
+        lambda u: urllib.request.urlopen(urllib.request.Request(
+            f"https://r.jina.ai/http://{u.replace('https://','')}", headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/plain"
+        }), timeout=timeout).read().decode("utf-8", errors="ignore"),
+    ]
+    
+    for i, strategy in enumerate(strategies):
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml",
-                "Cache-Control": "no-cache",
-            })
-            return urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8", errors="ignore")
+            html = strategy(url)
+            # 验证是否真的拿到了内容
+            if len(html) > 5000 and ("productTitle" in html or "priceblock" in html or "application/ld+json" in html):
+                print(f"Strategy {i+1}: OK ({len(html)} chars)")
+                return html
         except Exception as e:
-            if i == retries - 1:
-                raise
-            time.sleep(3 ** i)
+            print(f"Strategy {i+1}: {type(e).__name__}")
+    
+    raise Exception("All strategies failed")
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"

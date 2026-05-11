@@ -30,4 +30,4 @@ jobs:
           git config user.email "actions@github.com"
           git add news_state.json
           git diff --cached --quiet || git commit -m "chore: update news state"
-          git push
+          git pull --rebase && git push

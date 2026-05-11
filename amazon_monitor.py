@@ -140,7 +140,8 @@ def parse_product(html, asin):
             if m: data["price"] = m.group(1)
     
     if "bsr" not in data:
-        m = re.search(r'Best Sellers Rank[:\s]*#?([\d,]+)', html)
+        # BSR — 支持多种格式 (HTML/Jina)
+        m = re.search(r'Best Sellers Rank[:\|\s*]+#?([\d,]+)', html)
         if m: data["bsr"] = int(m.group(1).replace(",", ""))
     
     if "other_sellers_new" not in data:
@@ -295,8 +296,8 @@ if MY_ASIN in reports and MY_ASIN in state:
         st["last_title_preview"] = new_title[:80]
     
     # 图片数量改动
-    new_imgs = d.get("image_count", 0)
-    old_imgs = st.get("last_image_count", 0)
+    new_imgs = d.get("image_count") or 0
+    old_imgs = st.get("last_image_count") or 0
     if old_imgs > 0 and new_imgs > 0 and new_imgs != old_imgs:
         alerts.append(
             f"🖼 图片数量变化: {old_imgs} → {new_imgs} 张\n"

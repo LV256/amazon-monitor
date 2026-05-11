@@ -39,7 +39,7 @@ def fetch_text(url, timeout=15, retries=3):
         try:
             html = strategy(url)
             # 验证是否真的拿到了内容
-            if len(html) > 5000 and ("productTitle" in html or "priceblock" in html or "application/ld+json" in html):
+            if len(html) > 5000 and ("productTitle" in html or "priceblock" in html or "application/ld+json" in html or "Best Sellers Rank" in html or html.startswith("Title:")):
                 print(f"Strategy {i+1}: OK ({len(html)} chars)")
                 return html
         except Exception as e:
@@ -73,8 +73,10 @@ def parse_product(html, asin):
         m = re.search(r'(\d[\d,]*)\s*(?:ratings|global ratings|reviews)', html)
         if m: data["reviews_count"] = int(m.group(1).replace(",", ""))
         
-        # BSR
-        m = re.search(r'Best Sellers Rank[:\s]*#?([\d,]+)', html)
+        # BSR — 支持多种格式:
+        # HTML: "Best Sellers Rank: #3,149 in..."
+        # Jina markdown table: "| Best Sellers Rank | * #3,149 in..."
+        m = re.search(r'Best Sellers Rank[:\|\s*]+#?([\d,]+)', html)
         if m: data["bsr"] = int(m.group(1).replace(",", ""))
         
         # 价格

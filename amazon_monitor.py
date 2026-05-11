@@ -73,10 +73,10 @@ def parse_product(html, asin):
         m = re.search(r'(\d[\d,]*)\s*(?:ratings|global ratings|reviews)', html)
         if m: data["reviews_count"] = int(m.group(1).replace(",", ""))
         
-        # BSR — 支持多种格式:
-        # HTML: "Best Sellers Rank: #3,149 in..."
-        # Jina markdown table: "| Best Sellers Rank | * #3,149 in..."
-        m = re.search(r'Best Sellers Rank[:\|\s*]+#?([\d,]+)', html)
+        # BSR — 支持多种格式 (HTML可能有换行符)
+        # HTML: "Best Sellers Rank\n      #3,149 in..."
+        # Jina: "| Best Sellers Rank | * #3,149 in..."
+        m = re.search(r'Best Sellers Rank[^#]*#([\d,]+)', html)
         if m: data["bsr"] = int(m.group(1).replace(",", ""))
         
         # 价格
@@ -140,8 +140,8 @@ def parse_product(html, asin):
             if m: data["price"] = m.group(1)
     
     if "bsr" not in data:
-        # BSR — 支持多种格式 (HTML/Jina)
-        m = re.search(r'Best Sellers Rank[:\|\s*]+#?([\d,]+)', html)
+        # BSR — 支持多种格式 (HTML可能有换行符)
+        m = re.search(r'Best Sellers Rank[^#]*#([\d,]+)', html)
         if m: data["bsr"] = int(m.group(1).replace(",", ""))
     
     if "other_sellers_new" not in data:

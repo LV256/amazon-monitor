@@ -27,4 +27,4 @@ jobs:
           git config user.name "bot"
           git config user.email "bot@amazon-monitor"
           git add amazon_state.json 2>/dev/null || true
-          git diff --staged --quiet || (git commit -m "update state" && git push) || true
+          git diff --staged --quiet || (git commit -m "update state" && git pull --rebase && git push) || true

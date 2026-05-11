@@ -2,11 +2,15 @@
   "B0C2JZH9BB": {
     "last_review_hash": null,
     "last_rating": 4.4,
-    "last_reviews_count": null,
+    "last_reviews_count": 1482,
     "last_bsr": null,
     "last_sellers": 1,
     "last_title_hash": null,
-    "last_image_count": null,
+    "last_image_count": 0,
     "last_desc_hash": null
+  },
+  "B0CFXPZ5GT": {
+    "last_price": ".",
+    "last_review_hash": null
   }
 }

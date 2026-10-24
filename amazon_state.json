@@ -1,16 +1,16 @@
 {
   "B0C2JZH9BB": {
     "last_review_hash": "dd41e582dcf75734ae88752b769c0ee2",
-    "last_rating": 4.4,
-    "last_reviews_count": 2254,
-    "last_bsr": 2954,
+    "last_rating": null,
+    "last_reviews_count": null,
+    "last_bsr": null,
     "last_sellers": 1,
-    "last_title_hash": "988b61cfe203756f7d3e75ac048af774",
-    "last_image_count": 111,
-    "last_desc_hash": "2fd680583c59ac8ff76ccdfa6b27b67f"
+    "last_title_hash": "910843e3c4805fe3e06524c14e939262",
+    "last_image_count": 3,
+    "last_desc_hash": "6e200790140daa8f144db16a786cec39"
   },
   "B0CFXPZ5GT": {
-    "last_price": "20.77",
+    "last_price": ".",
     "last_review_hash": null
   }
 }
